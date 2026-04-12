@@ -1,0 +1,1421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LiDAR Grade Explorer</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,-apple-system,sans-serif}
+body{background:#f0f0ee;color:#1a1a1a;min-height:100vh}
+#app{max-width:1100px;margin:0 auto;padding:16px}
+
+.app-header{display:flex;align-items:center;justify-content:space-between;
+  padding:12px 0 16px;border-bottom:1px solid #ddd;margin-bottom:16px}
+.app-title{font-size:17px;font-weight:600;color:#111}
+.app-subtitle{font-size:12px;color:#888;margin-top:2px}
+.upload-btn-wrap{display:flex;gap:8px;align-items:center}
+
+#drop-zone{border:2px dashed #ccc;border-radius:12px;padding:32px;text-align:center;
+  background:#fff;transition:border-color 0.2s,background 0.2s;cursor:pointer}
+#drop-zone.over{border-color:#3b82f6;background:#eff6ff}
+#drop-zone .dz-icon{font-size:36px;margin-bottom:8px;color:#aaa}
+#drop-zone h3{font-size:15px;font-weight:500;margin-bottom:6px;color:#444}
+#drop-zone p{font-size:13px;color:#888;margin-bottom:12px}
+#file-input{display:none}
+.processing-bar{margin-top:16px;background:#e5e7eb;border-radius:8px;height:6px;overflow:hidden;display:none}
+.processing-bar .fill{height:100%;background:#3b82f6;width:0%;transition:width 0.3s;border-radius:8px}
+#proc-msg{font-size:13px;color:#555;margin-top:8px;text-align:center;min-height:18px}
+
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;
+  background:#fff;border:1px solid #e0e0e0;border-radius:10px;
+  padding:10px 14px;margin-bottom:12px}
+.ctrl-group{display:flex;align-items:center;gap:6px}
+.ctrl-group label{font-size:12px;color:#666;white-space:nowrap}
+.ctrl-sep{width:1px;height:24px;background:#e0e0e0;margin:0 4px}
+input[type=range]{width:140px;accent-color:#3b82f6}
+.angle-val{font-size:13px;font-weight:600;color:#3b82f6;min-width:38px}
+button{font-size:12px;padding:5px 11px;border:1px solid #d0d0d0;border-radius:6px;
+  background:#fff;color:#333;cursor:pointer;transition:background 0.15s}
+button:hover{background:#f3f4f6}
+button.active{background:#dbeafe;border-color:#93c5fd;color:#1d4ed8}
+button.primary{background:#3b82f6;border-color:#3b82f6;color:#fff}
+button.primary:hover{background:#2563eb}
+button.warn{background:#fef3c7;border-color:#f59e0b;color:#92400e}
+
+.maps-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:8px}
+.map-label{font-size:11px;font-weight:600;color:#666;text-transform:uppercase;
+  letter-spacing:0.05em;margin-bottom:5px}
+.map-outer{background:#111;border-radius:9px;overflow:hidden;
+  border:1px solid #ccc;position:relative;aspect-ratio:1.1/1}
+.map-outer.pan-mode{cursor:grab}
+.map-outer.pan-mode:active{cursor:grabbing}
+.map-inner{transform-origin:center center;
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+.map-inner img{display:block;width:100%;height:100%;object-fit:contain;
+  image-rendering:pixelated}
+.topo-ol{position:absolute;inset:0;width:100%;height:100%;
+  pointer-events:none;z-index:5}
+.grid-ol{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:6}
+.sel-cv{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair;z-index:10}
+.pan-mode .sel-cv{cursor:grab}
+.pan-mode .sel-cv:active{cursor:grabbing}
+.hint-row{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.hint{font-size:11px;color:#888}
+.legend{display:flex;align-items:center;gap:6px}
+.lbar{width:60px;height:7px;border-radius:3px;
+  background:linear-gradient(to right,#00287a,#1e6478,#1eb478,#d2c832,#f07814,#d22d19,#8c0a0a)}
+.zoom-badge{font-size:11px;font-weight:600;color:#3b82f6;
+  background:#eff6ff;border:1px solid #bfdbfe;border-radius:5px;
+  padding:2px 7px;display:none}
+
+.stats-row{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:14px}
+.stat-card{background:#fff;border:1px solid #e5e7eb;border-radius:9px;padding:10px 12px}
+.stat-label{font-size:11px;color:#888;margin-bottom:3px}
+.stat-val{font-size:20px;font-weight:600;color:#111;line-height:1}
+.stat-sub{font-size:10px;color:#aaa;margin-top:2px}
+
+#detail-section{margin-top:4px}
+.section-title{font-size:13px;font-weight:600;color:#444;text-transform:uppercase;
+  letter-spacing:0.06em;margin-bottom:10px;padding-bottom:6px;
+  border-bottom:1px solid #e5e7eb}
+.detail-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+.detail-panel{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:14px}
+.panel-title{font-size:13px;font-weight:600;color:#333;margin-bottom:10px}
+
+#topo-canvas{display:block;width:100%;border-radius:6px;image-rendering:pixelated;
+  border:1px solid #e5e7eb;margin-bottom:10px;transform-origin:center center}
+.point-badge{display:flex;align-items:center;gap:6px;font-size:12px;
+  margin-bottom:4px;padding:5px 8px;border-radius:6px;background:#f9fafb;
+  border:1px solid #e5e7eb}
+.point-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.point-dot.high{background:#dc2626}
+.point-dot.low{background:#2563eb}
+.point-label{font-weight:500;color:#333}
+.point-coords{color:#888;font-size:11px;margin-left:auto}
+
+.fill-presets{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+.fill-slider-wrap{margin-bottom:8px}
+.fill-slider-row{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.fill-slider-row input{flex:1}
+.fill-slider-labels{display:flex;justify-content:space-between;font-size:10px;color:#aaa}
+.fill-current{font-size:13px;color:#444;margin-bottom:10px;
+  background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:7px 10px}
+.fill-current span{font-weight:600;color:#0369a1}
+.vol-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:6px}
+.vol-card{border:1px solid #e5e7eb;border-radius:8px;padding:9px 10px}
+.vol-card.fill-card{background:#f0fdf4}
+.vol-card.cut-card{background:#fff7ed}
+.vol-card.net-card{background:#f8fafc}
+.vol-card-label{font-size:10px;color:#888;margin-bottom:2px;text-transform:uppercase;letter-spacing:0.05em}
+.vol-card-val{font-size:17px;font-weight:600;color:#111}
+.vol-card-unit{font-size:10px;color:#aaa;margin-top:1px}
+.net-row{display:flex;align-items:center;gap:8px;background:#f8fafc;
+  border:1px solid #e5e7eb;border-radius:8px;padding:9px 12px;margin-bottom:10px;font-size:13px}
+.net-row .net-label{color:#555}
+.net-row .net-val{font-weight:600;margin-left:auto}
+.net-import{color:#0369a1}
+.net-export{color:#065f46}
+.net-balanced{color:#4b5563}
+.cost-note{font-size:11px;color:#6b7280;background:#fafaf9;border:1px solid #e5e7eb;
+  border-radius:6px;padding:7px 10px;line-height:1.5}
+
+#preview-section,#wall-section,#compare-section{background:#fff;border:1px solid #e5e7eb;border-radius:10px;
+  padding:14px;margin-bottom:14px}
+#scene-wrap,#compare-wrap{border-radius:8px;overflow:hidden;background:#0f172a;border:1px solid #334155}
+#scene-cv,#compare-cv{display:block;width:100%;height:420px}
+.scene-hint{font-size:11px;color:#888;margin-top:6px;text-align:center}
+.scene-controls{display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;align-items:center}
+.legend-3d{display:flex;gap:12px;margin-top:8px;flex-wrap:wrap}
+.legend-3d-item{display:flex;align-items:center;gap:5px;font-size:11px;color:#666}
+.legend-3d-swatch{width:14px;height:14px;border-radius:3px;flex-shrink:0}
+
+#wall-section .wall-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+#wall-section .wall-diagrams{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.wall-canvas-wrap{background:#fafafa;border:1px solid #e5e7eb;border-radius:8px;padding:10px}
+.wall-canvas-wrap canvas{display:block;width:100%;border-radius:4px;background:#fff}
+.wall-canvas-label{font-size:11px;color:#666;font-weight:600;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em}
+.wall-stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.wall-stat{background:#fafafa;border:1px solid #e5e7eb;border-radius:8px;padding:9px 11px}
+.wall-stat-label{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:3px}
+.wall-stat-val{font-size:17px;font-weight:600;color:#111}
+.wall-stat-sub{font-size:10px;color:#aaa;margin-top:1px}
+.wall-legend{display:flex;align-items:center;gap:10px;font-size:11px;color:#666;margin-top:6px;flex-wrap:wrap}
+.wall-legend-bar{width:80px;height:8px;border-radius:3px;background:linear-gradient(to right,#fef3c7,#f59e0b,#dc2626)}
+#wall-empty{font-size:13px;color:#888;font-style:italic;text-align:center;padding:24px}
+.wall-warn{font-size:12px;padding:9px 12px;border-radius:8px;margin-bottom:6px;line-height:1.45}
+.wall-warn.yellow{background:#fef3c7;border:1px solid #fcd34d;color:#78350f}
+.wall-warn.red{background:#fee2e2;border:1px solid #fca5a5;color:#7f1d1d;font-weight:500}
+.wall-warn strong{font-weight:600}
+.compare-toggle{display:inline-flex;gap:0;border:1px solid #d0d0d0;border-radius:6px;overflow:hidden}
+.compare-toggle button{border:none;border-right:1px solid #d0d0d0;border-radius:0;padding:6px 12px;font-size:12px;background:#fff}
+.compare-toggle button:last-child{border-right:none}
+.compare-toggle button.active{background:#dbeafe;color:#1d4ed8}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div class="app-header">
+    <div>
+      <div class="app-title">LiDAR Grade Explorer</div>
+      <div class="app-subtitle">Upload a .ply or .e57 scan · measure grade · calculate fill &amp; cut volumes</div>
+    </div>
+    <div class="upload-btn-wrap" id="reupload-wrap" style="display:none">
+      <label for="file-reinput" class="primary" style="font-size:12px;padding:5px 11px;
+        border:1px solid #3b82f6;border-radius:6px;background:#3b82f6;color:#fff;
+        cursor:pointer;display:inline-block">Load new scan</label>
+      <input type="file" id="file-reinput" accept=".ply,.e57" style="display:none">
+    </div>
+  </div>
+
+  <div id="upload-section">
+    <div id="drop-zone">
+      <div class="dz-icon">⛰</div>
+      <h3>Drop your scan file here</h3>
+      <p>Supports .ply and .e57 point clouds from SiteScape, ReCap, Matterport, and others</p>
+      <label for="file-input" class="primary" style="display:inline-block;font-size:13px;
+        padding:8px 20px;border-radius:7px;background:#3b82f6;color:#fff;cursor:pointer;
+        border:1px solid #3b82f6">Choose file</label>
+      <input type="file" id="file-input" accept=".ply,.e57">
+    </div>
+    <div class="processing-bar" id="proc-bar"><div class="fill" id="proc-fill"></div></div>
+    <div id="proc-msg"></div>
+  </div>
+
+  <div id="map-section" style="display:none">
+    <div class="toolbar">
+      <div class="ctrl-group">
+        <label>Rotate</label>
+        <input type="range" id="rot-slider" min="-180" max="180" value="0" step="1">
+        <span class="angle-val" id="rot-label">0°</span>
+      </div>
+      <div class="ctrl-sep"></div>
+      <div class="ctrl-group">
+        <button id="btn-flipx" onclick="toggleFlip('fx')">Flip L/R</button>
+        <button id="btn-flipz" onclick="toggleFlip('fz')">Flip T/B</button>
+        <button onclick="resetView()">Reset view</button>
+      </div>
+      <div class="ctrl-sep"></div>
+      <div class="ctrl-group">
+        <label>Quick</label>
+        <button onclick="addRot(-45)">-45°</button>
+        <button onclick="addRot(-10)">-10°</button>
+        <button onclick="addRot(10)">+10°</button>
+        <button onclick="addRot(45)">+45°</button>
+      </div>
+      <div class="ctrl-sep"></div>
+      <div class="ctrl-group">
+        <label>Zoom</label>
+        <button onclick="adjustZoom(1.5)" title="Zoom in">+</button>
+        <button onclick="adjustZoom(1/1.5)" title="Zoom out">−</button>
+        <button id="btn-pan" onclick="togglePanMode()">Pan mode</button>
+        <button onclick="resetZoom()" id="btn-reset-zoom">Reset zoom</button>
+      </div>
+      <div class="ctrl-sep"></div>
+      <div class="ctrl-group">
+        <button id="btn-grid" onclick="toggleAlignGrid()">Alignment grid</button>
+      </div>
+    </div>
+
+    <div class="maps-row">
+      <div class="map-panel">
+        <div class="map-label">Elevation heatmap + topo</div>
+        <div class="map-outer" id="mo-e">
+          <div class="map-inner" id="mi-e"><img id="img-e" alt="elevation"></div>
+          <canvas class="topo-ol" id="main-topo"></canvas>
+          <canvas class="grid-ol" id="grid-e"></canvas>
+          <canvas class="sel-cv" id="cv-e"></canvas>
+        </div>
+      </div>
+      <div class="map-panel">
+        <div class="map-label">True-color scan</div>
+        <div class="map-outer" id="mo-r">
+          <div class="map-inner" id="mi-r"><img id="img-r" alt="true color"></div>
+          <canvas class="grid-ol" id="grid-r"></canvas>
+          <canvas class="sel-cv" id="cv-r"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="hint-row">
+      <div class="legend"><div class="lbar"></div></div>
+      <span class="hint">Low (blue) → mid (green/yellow) → high (red) · Drag to select · Scroll to zoom</span>
+      <span class="zoom-badge" id="zoom-badge">1×</span>
+    </div>
+  </div>
+
+  <div id="detail-section" style="display:none">
+    <div class="section-title">Selected area analysis</div>
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-label">Rise</div>
+        <div class="stat-val" id="sv-rise">—</div>
+        <div class="stat-sub">inches (high − low)</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Run</div>
+        <div class="stat-val" id="sv-run">—</div>
+        <div class="stat-sub">feet (longest dim)</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Grade</div>
+        <div class="stat-val" id="sv-grade">—</div>
+        <div class="stat-sub">percent slope</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Area</div>
+        <div class="stat-val" id="sv-area">—</div>
+        <div class="stat-sub">square feet</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Data points</div>
+        <div class="stat-val" id="sv-cells">—</div>
+        <div class="stat-sub">grid cells</div>
+      </div>
+    </div>
+
+    <div class="detail-row">
+      <div class="detail-panel">
+        <div class="panel-title">Elevation detail — topo map</div>
+        <canvas id="topo-canvas" width="400" height="400"></canvas>
+        <div class="point-badge">
+          <div class="point-dot high"></div>
+          <span class="point-label">Highest point</span>
+          <span class="point-coords" id="high-coords">—</span>
+        </div>
+        <div class="point-badge" style="margin-top:4px">
+          <div class="point-dot low"></div>
+          <span class="point-label">Lowest point</span>
+          <span class="point-coords" id="low-coords">—</span>
+        </div>
+        <div class="point-badge" style="margin-top:6px;background:#f0f9ff;border-color:#bae6fd">
+          <span style="font-size:11px;color:#555">Selection size:</span>
+          <span style="font-size:12px;font-weight:600;color:#0369a1;margin-left:auto">
+            <span id="sel-width">—</span> × <span id="sel-height">—</span>
+          </span>
+        </div>
+      </div>
+
+      <div class="detail-panel">
+        <div class="panel-title">Fill &amp; cut calculator</div>
+        <div class="fill-presets">
+          <button onclick="setFillPreset('high')">Fill to highest</button>
+          <button onclick="setFillPreset('mid')">Fill to midpoint</button>
+          <button onclick="setFillPreset('p75')">Fill to 75%</button>
+          <button onclick="setFillPreset('low')">Cut to lowest</button>
+        </div>
+        <div class="fill-slider-wrap" style="margin-top:10px">
+          <div class="fill-slider-row">
+            <span style="font-size:11px;color:#aaa">Low</span>
+            <input type="range" id="fill-slider" min="0" max="100" value="100" step="1">
+            <span style="font-size:11px;color:#aaa">High</span>
+          </div>
+          <div class="fill-slider-labels">
+            <span id="fill-low-label">0"</span>
+            <span id="fill-high-label">0"</span>
+          </div>
+        </div>
+        <div class="fill-current">Target level: <span id="fill-level-label">—</span> above lowest point</div>
+
+        <div style="font-size:11px;font-weight:600;color:#166534;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.05em">Fill (material needed)</div>
+        <div class="vol-grid" style="margin-bottom:8px">
+          <div class="vol-card fill-card">
+            <div class="vol-card-label">Volume</div>
+            <div class="vol-card-val" id="vol-fill-yd3">—</div>
+            <div class="vol-card-unit">cubic yards</div>
+          </div>
+          <div class="vol-card fill-card">
+            <div class="vol-card-label">Volume</div>
+            <div class="vol-card-val" id="vol-fill-m3">—</div>
+            <div class="vol-card-unit">cubic meters</div>
+          </div>
+          <div class="vol-card fill-card">
+            <div class="vol-card-label">Est. weight</div>
+            <div class="vol-card-val" id="vol-fill-tons">—</div>
+            <div class="vol-card-unit">approx. tons</div>
+          </div>
+        </div>
+
+        <div style="font-size:11px;font-weight:600;color:#9a3412;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.05em">Cut (material to remove)</div>
+        <div class="vol-grid" style="margin-bottom:8px">
+          <div class="vol-card cut-card">
+            <div class="vol-card-label">Volume</div>
+            <div class="vol-card-val" id="vol-cut-yd3">—</div>
+            <div class="vol-card-unit">cubic yards</div>
+          </div>
+          <div class="vol-card cut-card">
+            <div class="vol-card-label">Volume</div>
+            <div class="vol-card-val" id="vol-cut-m3">—</div>
+            <div class="vol-card-unit">cubic meters</div>
+          </div>
+          <div class="vol-card cut-card">
+            <div class="vol-card-label">Est. weight</div>
+            <div class="vol-card-val" id="vol-cut-tons">—</div>
+            <div class="vol-card-unit">approx. tons</div>
+          </div>
+        </div>
+
+        <div class="net-row">
+          <span class="net-label">Net material balance:</span>
+          <span class="net-val" id="net-balance">—</span>
+        </div>
+        <div class="cost-note">
+          Fill/gravel: ~1.4–1.6 tons/yd³ · Cut material may be reused on site if clean.
+          Net positive = import needed · Net negative = excess to haul away.
+        </div>
+      </div>
+    </div>
+
+    <div id="preview-section">
+      <div class="panel-title">3D preview</div>
+      <div class="scene-controls">
+        <button onclick="resetCamera()">Reset camera</button>
+        <button id="btn-exaggerate" onclick="toggleExaggerate()">Exaggerate elevation ×3</button>
+        <span style="font-size:11px;color:#6b7280;font-style:italic">Fill level synced with calculator above</span>
+      </div>
+      <div id="scene-wrap"><canvas id="scene-cv"></canvas></div>
+      <div class="legend-3d">
+        <div class="legend-3d-item">
+          <div class="legend-3d-swatch" style="background:linear-gradient(135deg,#001e78,#1e9850,#d2c832,#d22d19)"></div>Terrain
+        </div>
+        <div class="legend-3d-item">
+          <div class="legend-3d-swatch" style="background:rgba(180,140,60,0.85)"></div>Fill zone
+        </div>
+        <div class="legend-3d-item">
+          <div class="legend-3d-swatch" style="background:rgba(220,80,50,0.6)"></div>Cut zone
+        </div>
+        <div class="legend-3d-item">
+          <div class="legend-3d-swatch" style="background:rgba(59,130,246,0.4)"></div>Target plane
+        </div>
+      </div>
+      <div class="scene-hint">Drag to orbit · Scroll to zoom · Right-drag to pan</div>
+    </div>
+
+    <div id="wall-section">
+      <div class="panel-title">Retaining wall analysis</div>
+      <div id="wall-empty">Select an area and a fill target to see retaining wall requirements.</div>
+      <div id="wall-content" style="display:none">
+        <div id="wall-warnings" style="margin-bottom:12px"></div>
+        <div class="wall-grid">
+          <div>
+            <div class="wall-stat-grid">
+              <div class="wall-stat">
+                <div class="wall-stat-label">Total wall</div>
+                <div class="wall-stat-val" id="wall-total-ft">—</div>
+                <div class="wall-stat-sub">linear feet</div>
+              </div>
+              <div class="wall-stat">
+                <div class="wall-stat-label">Max height</div>
+                <div class="wall-stat-val" id="wall-max-h">—</div>
+                <div class="wall-stat-sub" id="wall-max-courses">—</div>
+              </div>
+              <div class="wall-stat">
+                <div class="wall-stat-label">Avg height</div>
+                <div class="wall-stat-val" id="wall-avg-h">—</div>
+                <div class="wall-stat-sub">across wall-needed sections</div>
+              </div>
+              <div class="wall-stat">
+                <div class="wall-stat-label">Face area</div>
+                <div class="wall-stat-val" id="wall-face-area">—</div>
+                <div class="wall-stat-sub">sq ft</div>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div class="wall-stat-grid">
+              <div class="wall-stat" style="background:#eff6ff;border-color:#bfdbfe">
+                <div class="wall-stat-label">Cut wall</div>
+                <div class="wall-stat-val" id="wall-cut-ft">—</div>
+                <div class="wall-stat-sub">linear ft · holds back natural bank</div>
+              </div>
+              <div class="wall-stat" style="background:#fef3c7;border-color:#fde68a">
+                <div class="wall-stat-label">Fill wall</div>
+                <div class="wall-stat-val" id="wall-fill-ft">—</div>
+                <div class="wall-stat-sub">linear ft · contains imported fill</div>
+              </div>
+              <div class="wall-stat" style="background:#f0fdf4;border-color:#bbf7d0">
+                <div class="wall-stat-label">Blocks needed</div>
+                <div class="wall-stat-val" id="wall-blocks">—</div>
+                <div class="wall-stat-sub" id="wall-block-spec">Versa-Lok 16×6×12</div>
+              </div>
+              <div class="wall-stat" style="background:#f8fafc">
+                <div class="wall-stat-label">Est. block cost</div>
+                <div class="wall-stat-val" id="wall-cost">—</div>
+                <div class="wall-stat-sub">@ $5/block (rough)</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="wall-diagrams">
+          <div class="wall-canvas-wrap">
+            <div class="wall-canvas-label">Perimeter — top-down (height-colored)</div>
+            <canvas id="wall-plan" width="380" height="260"></canvas>
+          </div>
+          <div class="wall-canvas-wrap">
+            <div class="wall-canvas-label">Unfolded profile — stepped courses</div>
+            <canvas id="wall-profile" width="380" height="260"></canvas>
+          </div>
+        </div>
+
+        <div class="wall-legend">
+          <span>Height:</span>
+          <div class="wall-legend-bar"></div>
+          <span>short (6") → tall (≥36")</span>
+          <span style="margin-left:auto;color:#888">
+            Threshold: any segment where outside ground differs from target by ≥6" gets a wall.
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div id="compare-section">
+      <div class="panel-title">Before / after comparison</div>
+      <div class="scene-controls">
+        <div style="display:flex;align-items:center;gap:10px;min-width:320px">
+          <span style="font-size:11px;color:#6b7280;font-weight:600">Before</span>
+          <input type="range" id="cmp-slider" min="0" max="100" value="100" step="1" style="flex:1">
+          <span style="font-size:11px;color:#6b7280;font-weight:600">After</span>
+        </div>
+        <button onclick="resetCompareCamera()">Reset camera</button>
+        <span style="font-size:11px;color:#6b7280;font-style:italic">Slide to crossfade · pad flattened to target · walls rendered as gray prisms</span>
+      </div>
+      <div id="compare-wrap"><canvas id="compare-cv"></canvas></div>
+      <div class="legend-3d">
+        <div class="legend-3d-item">
+          <div class="legend-3d-swatch" style="background:linear-gradient(135deg,#001e78,#1e9850,#d2c832,#d22d19)"></div>Terrain (colored by elevation)
+        </div>
+        <div class="legend-3d-item">
+          <div class="legend-3d-swatch" style="background:#2d3748"></div>Paved pad
+        </div>
+        <div class="legend-3d-item">
+          <div class="legend-3d-swatch" style="background:#94a3b8"></div>Retaining wall
+        </div>
+      </div>
+      <div class="scene-hint">Drag to orbit · Scroll to zoom · Right-drag to pan · Slide to compare before ↔ after</div>
+    </div>
+  </div>
+
+</div>
+
+<script type="importmap">
+{"imports":{"three":"https://unpkg.com/three@0.158.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.158.0/examples/jsm/"}}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const S = {
+  grid:null, xf:{rot:0,fx:false,fz:false}, zoom:{scale:1,px:0,py:0},
+  panMode:false, sel:{drag:false,sx:0,sy:0,ex:0,ey:0,on:false},
+  panDrag:{active:false,lx:0,ly:0}, cells:[], subgrid:null,
+  fillFrac:1.0, exag:1, showGrid:false, renderer:null, scene:null, camera:null, orbit:null,
+};
+
+function tc(t){
+  const stops=[[0.00,[0,40,120]],[0.12,[20,100,180]],[0.28,[30,160,120]],
+    [0.45,[60,180,60]],[0.60,[210,200,50]],[0.75,[240,120,20]],
+    [0.88,[210,45,25]],[1.00,[140,10,10]]];
+  for(let i=0;i<stops.length-1;i++){
+    const[t0,c0]=stops[i],[t1,c1]=stops[i+1];
+    if(t<=t1){const u=(t-t0)/(t1-t0);return c0.map((v,j)=>v+(c1[j]-v)*u);}
+  }
+  return stops[stops.length-1][1];
+}
+
+['file-input','file-reinput'].forEach(id=>{
+  document.getElementById(id).addEventListener('change',e=>{if(e.target.files[0])processFile(e.target.files[0]);});
+});
+const dz=document.getElementById('drop-zone');
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('over');});
+dz.addEventListener('dragleave',()=>dz.classList.remove('over'));
+dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('over');if(e.dataTransfer.files[0])processFile(e.dataTransfer.files[0]);});
+
+async function processFile(file){
+  const bar=document.getElementById('proc-bar'),fill=document.getElementById('proc-fill'),msg=document.getElementById('proc-msg');
+  bar.style.display='block';fill.style.width='0%';msg.textContent='Uploading and processing scan…';
+  animateBar(fill);
+  const fd=new FormData();fd.append('file',file);fd.append('voxel','0.03');fd.append('res','0.10');
+  try{
+    const res=await fetch('/api/upload',{method:'POST',body:fd});
+    const data=await res.json();
+    if(data.error)throw new Error(data.error);
+    fill.style.width='100%';msg.textContent='Done!';
+    setTimeout(()=>loadScanData(data),400);
+  }catch(err){fill.style.width='0%';msg.textContent='⚠ '+err.message;}
+}
+function animateBar(fill){let w=0;const iv=setInterval(()=>{w=Math.min(w+2,85);fill.style.width=w+'%';if(w>=85)clearInterval(iv);},200);}
+
+function loadScanData(data){
+  S.grid=data.grid;
+  document.getElementById('img-e').src='data:image/png;base64,'+data.elev_img;
+  document.getElementById('img-r').src='data:image/png;base64,'+data.rgb_img;
+  document.getElementById('upload-section').style.display='none';
+  document.getElementById('map-section').style.display='block';
+  document.getElementById('detail-section').style.display='none';
+  document.getElementById('reupload-wrap').style.display='flex';
+  resetZoom();clearSelection();scheduleTopoRender();drawAlignGrid();
+}
+
+// normToScreen: image-normalized (0-1) → canvas (0-1)
+function normToScreen(nx,ny){
+  const θ=S.xf.rot*Math.PI/180,dx=nx-0.5,dy=ny-0.5;
+  let sx=0.5+dx*Math.cos(θ)-dy*Math.sin(θ);
+  let sy=0.5+dx*Math.sin(θ)+dy*Math.cos(θ);
+  if(S.xf.fx)sx=1-sx;
+  if(S.xf.fz)sy=1-sy;
+  sx=(sx-0.5)*S.zoom.scale+0.5+S.zoom.px;
+  sy=(sy-0.5)*S.zoom.scale+0.5+S.zoom.py;
+  return[sx,sy];
+}
+function imgToScreen(c,r){return normToScreen((c+0.5)/S.grid.cols,(r+0.5)/S.grid.rows);}
+
+// screenToNorm: exact inverse of normToScreen
+function screenToNorm(sx,sy){
+  let qx=(sx-0.5-S.zoom.px)/S.zoom.scale+0.5;
+  let qy=(sy-0.5-S.zoom.py)/S.zoom.scale+0.5;
+  if(S.xf.fx)qx=1-qx;
+  if(S.xf.fz)qy=1-qy;
+  const θ=S.xf.rot*Math.PI/180;
+  const dx=qx-0.5,dy=qy-0.5;
+  return[0.5+dx*Math.cos(θ)+dy*Math.sin(θ), 0.5-dx*Math.sin(θ)+dy*Math.cos(θ)];
+}
+
+function applyTransform(){
+  const sx=S.xf.fx?-1:1,sy=S.xf.fz?-1:1;
+  const z=S.zoom.scale,px=S.zoom.px,py=S.zoom.py;
+  const t=`translate(${px*100}%,${py*100}%) scale(${z}) scaleX(${sx}) scaleY(${sy}) rotate(${S.xf.rot}deg)`;
+  document.getElementById('mi-e').style.transform=t;
+  document.getElementById('mi-r').style.transform=t;
+  scheduleTopoRender();
+}
+
+document.getElementById('rot-slider').addEventListener('input',function(){
+  S.xf.rot=parseInt(this.value);
+  document.getElementById('rot-label').textContent=S.xf.rot+'°';
+  applyTransform();clearSelection();
+});
+window.toggleFlip=function(which){
+  S.xf[which]=!S.xf[which];
+  const btnId=which==='fx'?'btn-flipx':'btn-flipz';
+  document.getElementById(btnId).classList.toggle('active',S.xf[which]);
+  applyTransform();clearSelection();
+};
+window.resetView=function(){
+  S.xf={rot:0,fx:false,fz:false};
+  document.getElementById('rot-slider').value=0;
+  document.getElementById('rot-label').textContent='0°';
+  ['btn-flipx','btn-flipz'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  applyTransform();clearSelection();
+};
+window.addRot=function(d){
+  S.xf.rot=Math.max(-180,Math.min(180,S.xf.rot+d));
+  document.getElementById('rot-slider').value=S.xf.rot;
+  document.getElementById('rot-label').textContent=S.xf.rot+'°';
+  applyTransform();clearSelection();
+};
+
+window.adjustZoom=function(factor){S.zoom.scale=Math.max(1,Math.min(8,S.zoom.scale*factor));clampPan();applyTransform();updateZoomBadge();};
+window.resetZoom=function(){S.zoom={scale:1,px:0,py:0};applyTransform();updateZoomBadge();};
+window.togglePanMode=function(){
+  S.panMode=!S.panMode;
+  document.getElementById('btn-pan').classList.toggle('active',S.panMode);
+  ['mo-e','mo-r'].forEach(id=>document.getElementById(id).classList.toggle('pan-mode',S.panMode));
+};
+function clampPan(){const max=(1-1/S.zoom.scale)/2+0.02;S.zoom.px=Math.max(-max,Math.min(max,S.zoom.px));S.zoom.py=Math.max(-max,Math.min(max,S.zoom.py));}
+function updateZoomBadge(){const badge=document.getElementById('zoom-badge');if(S.zoom.scale>1.01){badge.style.display='inline';badge.textContent=S.zoom.scale.toFixed(1)+'×';}else badge.style.display='none';}
+
+function addWheelZoom(cvId){
+  const cv=document.getElementById(cvId);
+  cv.addEventListener('wheel',e=>{
+    e.preventDefault();
+    const rect=cv.getBoundingClientRect();
+    const mx=(e.clientX-rect.left)/rect.width,my=(e.clientY-rect.top)/rect.height;
+    const factor=e.deltaY>0?0.85:1.18;
+    const newScale=Math.max(1,Math.min(8,S.zoom.scale*factor));
+    const imgX=(mx-0.5-S.zoom.px)/S.zoom.scale,imgY=(my-0.5-S.zoom.py)/S.zoom.scale;
+    S.zoom.px=mx-0.5-imgX*newScale;S.zoom.py=my-0.5-imgY*newScale;S.zoom.scale=newScale;
+    clampPan();applyTransform();updateZoomBadge();
+  },{passive:false});
+}
+addWheelZoom('cv-e');addWheelZoom('cv-r');
+
+// ── Alignment grid ────────────────────────────────────────────────────────────
+window.toggleAlignGrid=function(){
+  S.showGrid=!S.showGrid;
+  document.getElementById('btn-grid').classList.toggle('active',S.showGrid);
+  drawAlignGrid();
+};
+
+function drawAlignGrid(){
+  ['grid-e','grid-r'].forEach(id=>{
+    const cv=document.getElementById(id);if(!cv)return;
+    const outer=cv.parentElement;
+    cv.width=outer.clientWidth;cv.height=outer.clientHeight;
+    const ctx=cv.getContext('2d');
+    ctx.clearRect(0,0,cv.width,cv.height);
+    if(!S.showGrid)return;
+    const W=cv.width,H=cv.height,n=10;
+    ctx.strokeStyle='rgba(255,220,50,0.65)';ctx.lineWidth=1.5;
+    ctx.beginPath();
+    ctx.moveTo(W/2,0);ctx.lineTo(W/2,H);
+    ctx.moveTo(0,H/2);ctx.lineTo(W,H/2);
+    ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,0.32)';ctx.lineWidth=0.8;ctx.setLineDash([4,5]);
+    ctx.beginPath();
+    for(let i=1;i<n;i++){
+      if(i===n/2)continue;
+      const x=W*i/n,y=H*i/n;
+      ctx.moveTo(x,0);ctx.lineTo(x,H);
+      ctx.moveTo(0,y);ctx.lineTo(W,y);
+    }
+    ctx.stroke();ctx.setLineDash([]);
+    ctx.strokeStyle='rgba(255,220,50,0.45)';ctx.lineWidth=1.2;
+    const tick=16;
+    [[0,0],[W,0],[0,H],[W,H]].forEach(([cx,cy])=>{
+      const sx=cx===0?1:-1,sy=cy===0?1:-1;
+      ctx.beginPath();
+      ctx.moveTo(cx,cy+sy*tick);ctx.lineTo(cx,cy);ctx.lineTo(cx+sx*tick,cy);
+      ctx.stroke();
+    });
+  });
+}
+
+// ── Topo overlay on main elevation map ────────────────────────────────────────
+let _topoRAF=null;
+function scheduleTopoRender(){if(_topoRAF)cancelAnimationFrame(_topoRAF);_topoRAF=requestAnimationFrame(renderMainTopo);}
+function renderMainTopo(){
+  const cv=document.getElementById('main-topo');
+  if(!cv||!S.grid)return;
+  const outer=cv.parentElement,W=outer.clientWidth,H=outer.clientHeight;
+  if(!W||!H)return;
+  cv.width=W;cv.height=H;
+  const ctx=cv.getContext('2d');ctx.clearRect(0,0,W,H);
+  const{rows:R,cols:C,data}=S.grid;
+  const vals=data.filter(v=>v!==-1);if(vals.length<4)return;
+  const vmin=Math.min(...vals),vmax=Math.max(...vals),range=vmax-vmin||1e-9;
+  for(let lv=1;lv<12;lv++){
+    const thr=vmin+range*lv/12,major=(lv%3===0);
+    ctx.strokeStyle=major?'rgba(255,255,255,0.70)':'rgba(255,255,255,0.28)';
+    ctx.lineWidth=major?1.6:0.8;ctx.beginPath();
+    for(let r=0;r<R-1;r++){for(let c=0;c<C-1;c++){
+      const tl=data[r*C+c],tr=data[r*C+c+1],bl=data[(r+1)*C+c],br=data[(r+1)*C+c+1];
+      if(tl===-1||tr===-1||bl===-1||br===-1)continue;
+      const idx=((tl<thr)?8:0)|((tr<thr)?4:0)|((br<thr)?2:0)|((bl<thr)?1:0);
+      if(idx===0||idx===15)continue;
+      function lp(v1,v2){return Math.max(0,Math.min(1,(thr-v1)/(v2-v1+1e-9)));}
+      const pts={top:[(c+lp(tl,tr))/C,r/R],right:[(c+1)/C,(r+lp(tr,br))/R],bot:[(c+lp(bl,br))/C,(r+1)/R],left:[c/C,(r+lp(tl,bl))/R]};
+      const segs={1:['left','bot'],2:['bot','right'],3:['left','right'],4:['top','right'],5:['left','top','bot','right'],6:['top','bot'],7:['left','top'],8:['left','top'],9:['top','bot'],10:['left','bot','top','right'],11:['top','right'],12:['left','right'],13:['bot','right'],14:['left','bot']};
+      const s=segs[idx]||[];
+      for(let i=0;i<s.length;i+=2){if(i+1>=s.length)break;
+        const[n1x,n1y]=pts[s[i]],[n2x,n2y]=pts[s[i+1]];
+        const[sx1,sy1]=normToScreen(n1x,n1y),[sx2,sy2]=normToScreen(n2x,n2y);
+        ctx.moveTo(sx1*W,sy1*H);ctx.lineTo(sx2*W,sy2*H);}
+    }}
+    ctx.stroke();
+    if(major){
+      for(let r=2;r<R-2;r++){for(let c=2;c<C-2;c++){
+        const v=data[r*C+c],vl=data[r*C+c-1];if(v===-1||vl===-1)continue;
+        if((v<thr)!==(vl<thr)){
+          const[sx,sy]=normToScreen((c+0.5)/C,(r+0.5)/R);
+          if(sx<0.05||sx>0.95||sy<0.05||sy>0.95)continue;
+          const label=(thr*39.37).toFixed(0)+'"';
+          ctx.save();ctx.font='bold 10px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
+          const tw=ctx.measureText(label).width;
+          ctx.fillStyle='rgba(0,0,0,0.55)';ctx.fillRect(sx*W-tw/2-2,sy*H-6,tw+4,12);
+          ctx.fillStyle='rgba(255,255,255,0.9)';ctx.fillText(label,sx*W,sy*H);
+          ctx.restore();break;}
+      }break;}
+    }
+  }
+}
+
+// ── Selection + overlay ───────────────────────────────────────────────────────
+function addSelEvents(cvId){
+  const cv=document.getElementById(cvId);
+  function pos(e){const r=cv.getBoundingClientRect();return[(e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height];}
+  cv.addEventListener('mousedown',e=>{const[x,y]=pos(e);if(S.panMode){S.panDrag={active:true,lx:x,ly:y};return;}S.sel={drag:true,sx:x,sy:y,ex:x,ey:y,on:false};});
+  cv.addEventListener('mousemove',e=>{
+    const[x,y]=pos(e);
+    if(S.panDrag.active){S.zoom.px+=x-S.panDrag.lx;S.zoom.py+=y-S.panDrag.ly;S.panDrag.lx=x;S.panDrag.ly=y;clampPan();applyTransform();return;}
+    if(!S.sel.drag)return;S.sel.ex=x;S.sel.ey=y;drawOverlays();
+  });
+  cv.addEventListener('mouseup',e=>{
+    if(S.panDrag.active){S.panDrag.active=false;return;}
+    if(!S.sel.drag)return;const[x,y]=pos(e);S.sel.ex=x;S.sel.ey=y;S.sel.drag=false;S.sel.on=true;drawOverlays();computeSelection();
+  });
+  cv.addEventListener('mouseleave',()=>{S.panDrag.active=false;if(S.sel.drag){S.sel.drag=false;S.sel.on=true;drawOverlays();computeSelection();}});
+}
+addSelEvents('cv-e');addSelEvents('cv-r');
+
+function drawOverlays(){
+  ['cv-e','cv-r'].forEach(id=>{
+    const cv=document.getElementById(id),outer=cv.parentElement;
+    cv.width=outer.clientWidth;cv.height=outer.clientHeight;
+    const ctx=cv.getContext('2d');ctx.clearRect(0,0,cv.width,cv.height);
+    if(!S.sel.on&&!S.sel.drag)return;
+    const x0=Math.min(S.sel.sx,S.sel.ex)*cv.width,y0=Math.min(S.sel.sy,S.sel.ey)*cv.height;
+    const w=Math.abs(S.sel.ex-S.sel.sx)*cv.width,h=Math.abs(S.sel.ey-S.sel.sy)*cv.height;
+    ctx.strokeStyle='#38bdf8';ctx.lineWidth=2;ctx.setLineDash([5,3]);ctx.strokeRect(x0,y0,w,h);ctx.setLineDash([]);
+    ctx.fillStyle='rgba(56,189,248,0.1)';ctx.fillRect(x0,y0,w,h);
+  });
+  drawAlignGrid();
+}
+function clearSelection(){S.sel={drag:false,sx:0,sy:0,ex:0,ey:0,on:false};S.cells=[];S.subgrid=null;drawOverlays();document.getElementById('detail-section').style.display='none';}
+
+// ── Selection → grid cells ────────────────────────────────────────────────────
+function computeSelection(){
+  if(!S.grid)return;
+  const{rows:R,cols:C,data}=S.grid;
+  const bx0=Math.min(S.sel.sx,S.sel.ex),bx1=Math.max(S.sel.sx,S.sel.ex);
+  const by0=Math.min(S.sel.sy,S.sel.ey),by1=Math.max(S.sel.sy,S.sel.ey);
+  S.cells=[];let r0=R,r1=0,c0=C,c1=0;
+  for(let r=0;r<R;r++){for(let c=0;c<C;c++){
+    const v=data[r*C+c];if(v===-1)continue;
+    const[sx,sy]=imgToScreen(c,r);
+    if(sx>=bx0&&sx<=bx1&&sy>=by0&&sy<=by1){S.cells.push({r,c,v});if(r<r0)r0=r;if(r>r1)r1=r;if(c<c0)c0=c;if(c>c1)c1=c;}
+  }}
+  if(S.cells.length<4){clearSelection();return;}
+  const sgR=r1-r0+1,sgC=c1-c0+1;
+  const sgData=new Array(sgR*sgC).fill(-1);
+  for(const{r,c,v}of S.cells)sgData[(r-r0)*sgC+(c-c0)]=v;
+  S.subgrid={data:sgData,rows:sgR,cols:sgC,r0,c0};
+  updateStats();renderTopoDetail();
+  S.fillFrac=1.0;document.getElementById('fill-slider').value=100;
+  updateFillCalc();buildScene3D();updateWallAnalysis();buildCompareScene3D();
+  document.getElementById('detail-section').style.display='block';
+  document.getElementById('detail-section').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function updateStats(){
+  const vals=S.cells.map(c=>c.v),hi=Math.max(...vals),lo=Math.min(...vals);
+  const riseM=hi-lo,cell=S.grid.cell,sg=S.subgrid;
+  const runM=Math.max(sg.cols*cell,sg.rows*cell),areaSqM=S.cells.length*cell*cell;
+  document.getElementById('sv-rise').textContent=(riseM*39.37).toFixed(1)+'"';
+  document.getElementById('sv-run').textContent=(runM*3.281).toFixed(0)+' ft';
+  document.getElementById('sv-grade').textContent=runM>0?(riseM/runM*100).toFixed(1)+'%':'—';
+  document.getElementById('sv-area').textContent=(areaSqM*10.764).toFixed(0)+' ft²';
+  document.getElementById('sv-cells').textContent=S.cells.length.toLocaleString();
+}
+
+// ── Detail topo — rendered in screen space so edges are perpendicular ──────────
+function renderTopoDetail(){
+  const cv=document.getElementById('topo-canvas');
+  const{data,rows:R,cols:C,cell:cellSz}=S.grid;
+
+  const bx0=Math.min(S.sel.sx,S.sel.ex),bx1=Math.max(S.sel.sx,S.sel.ex);
+  const by0=Math.min(S.sel.sy,S.sel.ey),by1=Math.max(S.sel.sy,S.sel.ey);
+  const sw=bx1-bx0,sh=by1-by0;
+
+  const[nx0,ny0]=screenToNorm(bx0,by0);
+  const[nx1,ny1]=screenToNorm(bx1,by0);
+  const[nx2,ny2]=screenToNorm(bx0,by1);
+  const physW=Math.sqrt(((nx1-nx0)*C*cellSz)**2+((ny1-ny0)*R*cellSz)**2);
+  const physH=Math.sqrt(((nx2-nx0)*C*cellSz)**2+((ny2-ny0)*R*cellSz)**2);
+
+  const maxPx=380;
+  let pw,ph;
+  if(sw>=sh){pw=maxPx;ph=Math.max(24,Math.round(maxPx*sh/sw));}
+  else{ph=maxPx;pw=Math.max(24,Math.round(maxPx*sw/sh));}
+
+  cv.width=pw;cv.height=ph;
+  cv.style.width=pw+'px';cv.style.height=ph+'px';
+  cv.style.transform='';
+
+  const ctx=cv.getContext('2d');
+  const imgData=ctx.createImageData(pw,ph);
+  const d=imgData.data;
+
+  const vals=S.cells.map(c=>c.v);
+  const vmin=Math.min(...vals),vmax=Math.max(...vals),range=vmax-vmin||1e-9;
+
+  const elev=new Float32Array(pw*ph).fill(-1);
+  for(let py=0;py<ph;py++){
+    for(let px=0;px<pw;px++){
+      const sx=bx0+(px+0.5)/pw*sw,sy=by0+(py+0.5)/ph*sh;
+      const[nx,ny]=screenToNorm(sx,sy);
+      const gc=Math.floor(nx*C),gr=Math.floor(ny*R);
+      if(gc<0||gc>=C||gr<0||gr>=R)continue;
+      const v=data[gr*C+gc];if(v===-1)continue;
+      elev[py*pw+px]=v;
+      const t=Math.max(0,Math.min(1,(v-vmin)/range));
+      const[cr,cg,cb]=tc(t);
+      const i=4*(py*pw+px);d[i]=cr;d[i+1]=cg;d[i+2]=cb;d[i+3]=255;
+    }
+  }
+  ctx.putImageData(imgData,0,0);
+
+  for(let lv=1;lv<8;lv++){
+    const thr=vmin+range*lv/8,major=lv%2===0;
+    ctx.strokeStyle=major?'rgba(0,0,0,0.6)':'rgba(0,0,0,0.3)';
+    ctx.lineWidth=major?1.5:0.8;ctx.beginPath();
+    for(let r=0;r<ph-1;r++){for(let c=0;c<pw-1;c++){
+      const tl=elev[r*pw+c],tr=elev[r*pw+c+1];
+      const bl=elev[(r+1)*pw+c],br=elev[(r+1)*pw+c+1];
+      if(tl===-1||tr===-1||bl===-1||br===-1)continue;
+      const idx=((tl<thr)?8:0)|((tr<thr)?4:0)|((br<thr)?2:0)|((bl<thr)?1:0);
+      if(idx===0||idx===15)continue;
+      function lp(v1,v2){return Math.max(0,Math.min(1,(thr-v1)/(v2-v1+1e-9)));}
+      const top=[c+lp(tl,tr),r],right=[c+1,r+lp(tr,br)];
+      const bot=[c+lp(bl,br),r+1],left=[c,r+lp(tl,bl)];
+      const segs={1:[[left,bot]],2:[[bot,right]],3:[[left,right]],4:[[top,right]],
+        5:[[left,top],[bot,right]],6:[[top,bot]],7:[[left,top]],8:[[left,top]],
+        9:[[top,bot]],10:[[left,bot],[top,right]],11:[[top,right]],12:[[left,right]],
+        13:[[bot,right]],14:[[left,bot]]};
+      for(const[p1,p2]of(segs[idx]||[])){ctx.moveTo(p1[0],p1[1]);ctx.lineTo(p2[0],p2[1]);}
+    }}
+    ctx.stroke();
+    if(major){
+      ctx.fillStyle='rgba(0,0,0,0.65)';ctx.font='9px system-ui';
+      outer:for(let r=1;r<ph-1;r++){for(let c=1;c<pw-1;c++){
+        const v=elev[r*pw+c],vl=elev[r*pw+c-1];
+        if(v===-1||vl===-1)continue;
+        if((v<thr)!==(vl<thr)){
+          const label=(thr*39.37).toFixed(1)+'"';
+          ctx.save();const tw=ctx.measureText(label).width;
+          ctx.fillStyle='rgba(255,255,255,0.8)';ctx.fillRect(c-tw/2-2,r-5,tw+4,11);
+          ctx.fillStyle='rgba(0,0,0,0.75)';ctx.textAlign='center';ctx.textBaseline='middle';
+          ctx.fillText(label,c,r);ctx.restore();break outer;}
+      }}
+    }
+  }
+
+  let hiCell=S.cells[0],loCell=S.cells[0];
+  for(const c of S.cells){if(c.v>hiCell.v)hiCell=c;if(c.v<loCell.v)loCell=c;}
+
+  function cellToCanvas(c,r){
+    const[sx,sy]=imgToScreen(c,r);
+    return[(sx-bx0)/sw*pw,(sy-by0)/sh*ph];
+  }
+  function drawMarker(x,y,color,char){
+    ctx.save();ctx.font='bold 14px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.strokeText(char,x,y);
+    ctx.fillStyle=color;ctx.fillText(char,x,y);ctx.restore();
+  }
+  const[hx,hy]=cellToCanvas(hiCell.c,hiCell.r);
+  const[lx,ly]=cellToCanvas(loCell.c,loCell.r);
+  if(hx>=0&&hx<=pw&&hy>=0&&hy<=ph)drawMarker(hx,hy,'#dc2626','▲');
+  if(lx>=0&&lx<=pw&&ly>=0&&ly<=ph)drawMarker(lx,ly,'#2563eb','▼');
+
+  document.getElementById('high-coords').textContent=`${(hiCell.v*39.37).toFixed(1)}" above low`;
+  document.getElementById('low-coords').textContent=`${(loCell.v*39.37).toFixed(1)}" above datum`;
+  document.getElementById('sel-width').textContent=(physW*3.281).toFixed(1)+' ft';
+  document.getElementById('sel-height').textContent=(physH*3.281).toFixed(1)+' ft';
+}
+
+// ── Volume calculator ─────────────────────────────────────────────────────────
+window.setFillPreset=function(preset){
+  const pct={high:100,mid:50,p75:75,low:0}[preset]??100;
+  S.fillFrac=pct/100;document.getElementById('fill-slider').value=pct;
+  updateFillCalc();buildScene3D();updateWallAnalysis();buildCompareScene3D();
+};
+let _fillDebounce=null;
+document.getElementById('fill-slider').addEventListener('input',function(){
+  S.fillFrac=parseInt(this.value)/100;updateFillCalc();updateWallAnalysis();
+  clearTimeout(_fillDebounce);_fillDebounce=setTimeout(()=>{buildScene3D();buildCompareScene3D();},120);
+});
+
+function updateFillCalc(){
+  if(!S.cells.length)return;
+  const vals=S.cells.map(c=>c.v),hi=Math.max(...vals),lo=Math.min(...vals);
+  const tgt=lo+(hi-lo)*S.fillFrac,cArea=S.grid.cell**2;
+  let fillM3=0,cutM3=0;
+  for(const{v}of S.cells){if(v<tgt)fillM3+=(tgt-v)*cArea;else if(v>tgt)cutM3+=(v-tgt)*cArea;}
+  const fillYd3=fillM3*1.308,cutYd3=cutM3*1.308,netYd3=fillYd3-cutYd3;
+  document.getElementById('vol-fill-m3').textContent=fillM3.toFixed(2);
+  document.getElementById('vol-fill-yd3').textContent=fillYd3.toFixed(1);
+  document.getElementById('vol-fill-tons').textContent=(fillYd3*1.5).toFixed(1);
+  document.getElementById('vol-cut-m3').textContent=cutM3.toFixed(2);
+  document.getElementById('vol-cut-yd3').textContent=cutYd3.toFixed(1);
+  document.getElementById('vol-cut-tons').textContent=(cutYd3*1.5).toFixed(1);
+  const nb=document.getElementById('net-balance');
+  if(Math.abs(netYd3)<0.1){nb.textContent='Balanced';nb.className='net-val net-balanced';}
+  else if(netYd3>0){nb.textContent=`Import ${netYd3.toFixed(1)} yd³`;nb.className='net-val net-import';}
+  else{nb.textContent=`Export ${(-netYd3).toFixed(1)} yd³`;nb.className='net-val net-export';}
+  document.getElementById('fill-level-label').textContent=((tgt-lo)*39.37).toFixed(1)+'"';
+  document.getElementById('fill-low-label').textContent='0"';
+  document.getElementById('fill-high-label').textContent=((hi-lo)*39.37).toFixed(1)+'"';
+}
+
+// ── Three.js 3D scene ─────────────────────────────────────────────────────────
+function buildScene3D(){
+  const canvas=document.getElementById('scene-cv');
+  const w=canvas.parentElement.clientWidth||800,h=420;
+  if(!S.renderer){
+    S.renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+    S.renderer.setPixelRatio(window.devicePixelRatio);
+    S.scene=new THREE.Scene();S.scene.background=new THREE.Color(0x0f172a);
+    S.camera=new THREE.PerspectiveCamera(50,w/h,0.01,500);
+    S.orbit=new OrbitControls(S.camera,canvas);S.orbit.enableDamping=true;S.orbit.dampingFactor=0.08;
+    S.scene.add(new THREE.AmbientLight(0xffffff,0.55));
+    const sun=new THREE.DirectionalLight(0xffffff,0.9);sun.position.set(10,20,10);S.scene.add(sun);
+    const rim=new THREE.DirectionalLight(0x9ec5ff,0.3);rim.position.set(-10,5,-10);S.scene.add(rim);
+    S.scene.add(new THREE.GridHelper(40,40,0x334155,0x1e293b));
+    (function animate(){requestAnimationFrame(animate);S.orbit.update();S.renderer.render(S.scene,S.camera);})();
+  }
+  S.renderer.setSize(w,h);S.camera.aspect=w/h;S.camera.updateProjectionMatrix();
+
+  if(S._group){S.scene.remove(S._group);S._group=null;}
+
+  const grp=new THREE.Group();
+  grp.scale.x=S.xf.fx?-1:1;
+  grp.scale.z=S.xf.fz?-1:1;
+  grp.rotation.y=-S.xf.rot*Math.PI/180;
+  S._group=grp;S.scene.add(grp);
+
+  const sg=S.subgrid,cell=S.grid.cell,ex=S.exag;
+  const vals=S.cells.map(c=>c.v),vmin=Math.min(...vals),vmax=Math.max(...vals);
+  const range=vmax-vmin||1e-9,tgt=vmin+(vmax-vmin)*S.fillFrac;
+  const offX=-sg.cols*cell/2,offZ=-sg.rows*cell/2;
+
+  const pos=[],col=[],idx=[],vidx={};let vi=0;
+  for(let r=0;r<sg.rows;r++){for(let c=0;c<sg.cols;c++){
+    const v=sg.data[r*sg.cols+c];if(v===-1)continue;
+    vidx[r*sg.cols+c]=vi++;
+    const[cr,cg,cb]=tc(Math.max(0,Math.min(1,(v-vmin)/range)));
+    col.push(cr/255,cg/255,cb/255);pos.push(c*cell+offX,v*ex,r*cell+offZ);
+  }}
+  for(let r=0;r<sg.rows-1;r++){for(let c=0;c<sg.cols-1;c++){
+    const a=vidx[r*sg.cols+c],b=vidx[r*sg.cols+c+1],dd=vidx[(r+1)*sg.cols+c],e=vidx[(r+1)*sg.cols+c+1];
+    if(a!=null&&b!=null&&dd!=null)idx.push(a,b,dd);if(b!=null&&e!=null&&dd!=null)idx.push(b,e,dd);
+  }}
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+  geo.setAttribute('color',new THREE.Float32BufferAttribute(col,3));
+  geo.setIndex(idx);geo.computeVertexNormals();
+  grp.add(new THREE.Mesh(geo,new THREE.MeshLambertMaterial({vertexColors:true,side:THREE.DoubleSide})));
+
+  function makePrisms(filter,colorRGB){
+    const fp=[],fc=[],fi=[];let fvi=0;
+    for(let r=0;r<sg.rows;r++){for(let c=0;c<sg.cols;c++){
+      const v=sg.data[r*sg.cols+c];if(v===-1||!filter(v))continue;
+      const x=c*cell+offX,z=r*cell+offZ,half=cell*0.47;
+      const y0=Math.min(v,tgt)*ex,y1=Math.max(v,tgt)*ex,base=fvi;
+      fp.push(x-half,y1,z-half,x+half,y1,z-half,x+half,y1,z+half,x-half,y1,z+half,
+              x-half,y0,z-half,x+half,y0,z-half,x+half,y0,z+half,x-half,y0,z+half);
+      for(let i=0;i<8;i++)fc.push(...colorRGB);
+      fi.push(base,base+1,base+2,base,base+2,base+3,base,base+4,base+5,base,base+5,base+1,
+              base+1,base+5,base+6,base+1,base+6,base+2,base+2,base+6,base+7,base+2,base+7,base+3,
+              base+3,base+7,base+4,base+3,base+4,base);fvi+=8;
+    }}
+    if(!fp.length)return;
+    const fg=new THREE.BufferGeometry();
+    fg.setAttribute('position',new THREE.Float32BufferAttribute(fp,3));
+    fg.setAttribute('color',new THREE.Float32BufferAttribute(fc,3));
+    fg.setIndex(fi);fg.computeVertexNormals();
+    grp.add(new THREE.Mesh(fg,new THREE.MeshLambertMaterial({vertexColors:true,transparent:true,opacity:0.82,side:THREE.DoubleSide})));
+  }
+  makePrisms(v=>v<tgt,[0.78,0.57,0.22]);
+  makePrisms(v=>v>tgt,[0.85,0.28,0.18]);
+
+  const pg=new THREE.PlaneGeometry(sg.cols*cell,sg.rows*cell);
+  const pm=new THREE.Mesh(pg,new THREE.MeshBasicMaterial({color:0x3b82f6,transparent:true,opacity:0.28,side:THREE.DoubleSide}));
+  pm.rotation.x=-Math.PI/2;pm.position.set(0,tgt*ex,0);grp.add(pm);
+
+  const hiC=S.cells.reduce((a,b)=>b.v>a.v?b:a),loC=S.cells.reduce((a,b)=>b.v<a.v?b:a);
+  function mkSph(x,y,z,r,color){return new THREE.Mesh(new THREE.SphereGeometry(r,12,8),new THREE.MeshPhongMaterial({color,emissive:color,emissiveIntensity:0.3}));}
+  grp.add(mkSph((hiC.c-sg.c0)*cell+offX+cell/2,hiC.v*ex+0.15,(hiC.r-sg.r0)*cell+offZ+cell/2,0.18,0xef4444));
+  grp.add(mkSph((loC.c-sg.c0)*cell+offX+cell/2,loC.v*ex+0.15,(loC.r-sg.r0)*cell+offZ+cell/2,0.18,0x3b82f6));
+
+  const cy=(vmin+(vmax-vmin)*0.5)*ex,dist=Math.max(sg.cols,sg.rows)*cell*1.8;
+  S.camera.position.set(0,cy+dist*0.8,dist*1.2);S.orbit.target.set(0,cy,0);S.orbit.update();
+}
+
+window.resetCamera=function(){
+  if(!S._group||!S.cells.length)return;
+  const vals=S.cells.map(c=>c.v),cy=(Math.min(...vals)+Math.max(...vals))/2*S.exag;
+  const dist=Math.max(S.subgrid.cols,S.subgrid.rows)*S.grid.cell*1.8;
+  S.camera.position.set(0,cy+dist*0.8,dist*1.2);S.orbit.target.set(0,cy,0);S.orbit.update();
+};
+window.toggleExaggerate=function(){
+  S.exag=S.exag===1?3:1;
+  const btn=document.getElementById('btn-exaggerate');
+  btn.classList.toggle('active',S.exag===3);
+  btn.textContent=S.exag===1?'Exaggerate elevation ×3':'Exaggeration: ×3 (click to reset)';
+  buildScene3D();buildCompareScene3D();
+};
+
+// ── Retaining wall analysis ───────────────────────────────────────────────────
+const BLOCK_SPEC={name:'Versa-Lok 16×6×12',widthIn:16,heightIn:6,depthIn:12,costUsd:5};
+const WALL_THRESHOLD_IN=6;
+
+function computeRetainingWalls(){
+  if(!S.subgrid||!S.cells.length||!S.sel.on)return null;
+  const fullG=S.grid,cell=fullG.cell,R=fullG.rows,C=fullG.cols;
+  const vals=S.cells.map(c=>c.v),lo=Math.min(...vals),hi=Math.max(...vals);
+  const tgt=lo+(hi-lo)*S.fillFrac;
+  const threshM=WALL_THRESHOLD_IN*0.0254;
+
+  // User's drawn rectangle in screen space
+  const bx0=Math.min(S.sel.sx,S.sel.ex),bx1=Math.max(S.sel.sx,S.sel.ex);
+  const by0=Math.min(S.sel.sy,S.sel.ey),by1=Math.max(S.sel.sy,S.sel.ey);
+  // 4 corners in screen space → grid-space float coords, clockwise from top-left
+  const sc=[[bx0,by0],[bx1,by0],[bx1,by1],[bx0,by1]];
+  const corners=sc.map(([sx,sy])=>{
+    const[nx,ny]=screenToNorm(sx,sy);
+    return{c:nx*C,r:ny*R};
+  });
+  const cen={
+    c:(corners[0].c+corners[1].c+corners[2].c+corners[3].c)/4,
+    r:(corners[0].r+corners[1].r+corners[2].r+corners[3].r)/4
+  };
+
+  const segs=[];
+  for(let ei=0;ei<4;ei++){
+    const p0=corners[ei],p1=corners[(ei+1)%4];
+    const dc=p1.c-p0.c,dr=p1.r-p0.r;
+    const edgeLen=Math.sqrt(dc*dc+dr*dr);
+    if(edgeLen<0.5)continue;
+    const edgeLenM=edgeLen*cell;
+    const nSegs=Math.max(1,Math.round(edgeLen));
+    const segLenM=edgeLenM/nSegs;
+    const ec=dc/edgeLen,er=dr/edgeLen;
+    // Outward normal: rotate edge dir 90°, flip if pointing toward center
+    let nc=-er,nr=ec;
+    const midc=(p0.c+p1.c)/2,midr=(p0.r+p1.r)/2;
+    if(nc*(cen.c-midc)+nr*(cen.r-midr)>0){nc=-nc;nr=-nr;}
+    for(let i=0;i<nSegs;i++){
+      const tm=(i+0.5)/nSegs;
+      const m={c:p0.c+dc*tm,r:p0.r+dr*tm};
+      const t0=i/nSegs,t1=(i+1)/nSegs;
+      // Sample ground 1 cell outward from the edge midpoint
+      const sc2=Math.round(m.c+nc),sr2=Math.round(m.r+nr);
+      let outsideV=-1;
+      if(sc2>=0&&sc2<C&&sr2>=0&&sr2<R)outsideV=fullG.data[sr2*C+sc2];
+      const diff=outsideV===-1?0:outsideV-tgt,absDiff=Math.abs(diff);
+      const needs=outsideV!==-1&&absDiff>=threshM;
+      segs.push({
+        edge:ei,t0,t1,mid:m,edgeDir:{c:ec,r:er},outwardN:{c:nc,r:nr},
+        outsideV,heightM:needs?absDiff:0,isCut:needs?diff>0:null,lenM:segLenM
+      });
+    }
+  }
+  return{segs,cell,tgt,threshM,corners,edgeLabels:['Top','Right','Bottom','Left']};
+}
+
+function wallColor(hm){
+  const norm=Math.max(0,Math.min(1,(hm*39.37-6)/30));
+  if(norm<0.5){const t=norm*2;return`rgb(${(254+(245-254)*t)|0},${(243+(158-243)*t)|0},${(199+(11-199)*t)|0})`;}
+  const t=(norm-0.5)*2;
+  return`rgb(${(245+(220-245)*t)|0},${(158+(38-158)*t)|0},${(11+(38-11)*t)|0})`;
+}
+
+function updateWallAnalysis(){
+  const result=computeRetainingWalls();
+  const empty=document.getElementById('wall-empty');
+  const content=document.getElementById('wall-content');
+  if(!result){empty.style.display='block';content.style.display='none';S.wallData=null;return;}
+  S.wallData=result;
+  const{segs,cell}=result;
+  const wallSegs=segs.filter(s=>s.heightM>0);
+  if(!wallSegs.length){
+    empty.textContent='No retaining wall needed — outside ground is within ±6" of target everywhere.';
+    empty.style.display='block';content.style.display='none';return;
+  }
+  empty.style.display='none';content.style.display='block';
+
+  const wallLenM=wallSegs.reduce((a,s)=>a+s.lenM,0);
+  const maxHm=Math.max(...wallSegs.map(s=>s.heightM));
+  const avgHm=wallSegs.reduce((a,s)=>a+s.heightM*s.lenM,0)/wallLenM;
+  const faceM2=wallSegs.reduce((a,s)=>a+s.heightM*s.lenM,0);
+  const blockHm=BLOCK_SPEC.heightIn*0.0254,blockWm=BLOCK_SPEC.widthIn*0.0254;
+  let totalBlocks=0;
+  for(const s of wallSegs){
+    const courses=Math.ceil(s.heightM/blockHm);
+    totalBlocks+=courses*(s.lenM/blockWm);
+  }
+  totalBlocks=Math.ceil(totalBlocks);
+  const cutLen=wallSegs.filter(s=>s.isCut).reduce((a,s)=>a+s.lenM,0)*3.281;
+  const fillLen=wallSegs.filter(s=>!s.isCut).reduce((a,s)=>a+s.lenM,0)*3.281;
+
+  document.getElementById('wall-total-ft').textContent=(wallLenM*3.281).toFixed(1)+' ft';
+  document.getElementById('wall-max-h').textContent=(maxHm*39.37).toFixed(1)+'"';
+  document.getElementById('wall-max-courses').textContent=Math.ceil(maxHm/blockHm)+' courses';
+  document.getElementById('wall-avg-h').textContent=(avgHm*39.37).toFixed(1)+'"';
+  document.getElementById('wall-face-area').textContent=(faceM2*10.764).toFixed(0);
+  document.getElementById('wall-cut-ft').textContent=cutLen.toFixed(1)+' ft';
+  document.getElementById('wall-fill-ft').textContent=fillLen.toFixed(1)+' ft';
+  document.getElementById('wall-blocks').textContent=totalBlocks.toLocaleString();
+  document.getElementById('wall-cost').textContent='$'+(totalBlocks*BLOCK_SPEC.costUsd).toLocaleString();
+
+  const maxHin=maxHm*39.37;
+  const warnEl=document.getElementById('wall-warnings');
+  const warns=[];
+  if(maxHin>=72){
+    warns.push(`<div class="wall-warn red">⚠ <strong>Engineered design + permit required.</strong> Max wall height ${maxHin.toFixed(0)}" (${(maxHin/12).toFixed(1)} ft) exceeds 6 ft — MA building code typically requires stamped drawings and a permit above 4 ft. Strongly consider <strong>tiered walls</strong> (two shorter walls with a flat bench between) or reducing pad size to lower the max height.</div>`);
+  }else if(maxHin>=48){
+    warns.push(`<div class="wall-warn yellow">⚠ <strong>Geogrid reinforcement required.</strong> Max wall height ${maxHin.toFixed(0)}" (${(maxHin/12).toFixed(1)} ft) exceeds 4 ft — dry-stack block alone will fail over time. Add geogrid tiebacks every 2 courses extending 4–6 ft into the retained soil, and most MA towns require a permit above 4 ft.</div>`);
+  }
+  warnEl.innerHTML=warns.join('');
+
+  renderWallPlan();renderWallProfile();
+}
+
+function renderWallPlan(){
+  const cv=document.getElementById('wall-plan');
+  const W=cv.clientWidth||380,H=260;
+  cv.width=W*devicePixelRatio;cv.height=H*devicePixelRatio;
+  cv.style.height=H+'px';
+  const ctx=cv.getContext('2d');ctx.scale(devicePixelRatio,devicePixelRatio);
+  ctx.clearRect(0,0,W,H);
+  const{segs,cell,corners}=S.wallData;
+  const topM=Math.hypot(corners[1].c-corners[0].c,corners[1].r-corners[0].r)*cell;
+  const rightM=Math.hypot(corners[2].c-corners[1].c,corners[2].r-corners[1].r)*cell;
+  const pad=34;
+  const scale=Math.min((W-2*pad)/topM,(H-2*pad)/rightM);
+  const rw=topM*scale,rh=rightM*scale;
+  const x0=(W-rw)/2,y0=(H-rh)/2;
+  const thick=Math.max(4,cell*scale*0.9);
+
+  ctx.fillStyle='#eff6ff';ctx.strokeStyle='#1d4ed8';ctx.lineWidth=1.5;
+  ctx.fillRect(x0,y0,rw,rh);ctx.strokeRect(x0,y0,rw,rh);
+
+  for(const s of segs){
+    if(s.heightM===0)continue;
+    let sx,sy,sw,sh;
+    if(s.edge===0){sx=x0+s.t0*rw;sy=y0-thick;sw=(s.t1-s.t0)*rw;sh=thick;}
+    else if(s.edge===1){sx=x0+rw;sy=y0+s.t0*rh;sw=thick;sh=(s.t1-s.t0)*rh;}
+    else if(s.edge===2){sx=x0+rw-s.t1*rw;sy=y0+rh;sw=(s.t1-s.t0)*rw;sh=thick;}
+    else{sx=x0-thick;sy=y0+rh-s.t1*rh;sw=thick;sh=(s.t1-s.t0)*rh;}
+    ctx.fillStyle=wallColor(s.heightM);ctx.fillRect(sx,sy,sw+0.5,sh+0.5);
+  }
+
+  ctx.fillStyle='#64748b';ctx.font='10px system-ui';ctx.textAlign='center';
+  ctx.fillText('Top',W/2,y0-thick-4);
+  ctx.fillText('Bottom',W/2,y0+rh+thick+12);
+  ctx.textAlign='right';ctx.fillText('Left',x0-thick-4,H/2+3);
+  ctx.textAlign='left';ctx.fillText('Right',x0+rw+thick+4,H/2+3);
+  ctx.fillStyle='#1d4ed8';ctx.font='bold 11px system-ui';ctx.textAlign='center';
+  ctx.fillText('PAD',W/2,H/2+4);
+  ctx.font='9px system-ui';ctx.fillStyle='#64748b';ctx.textAlign='center';
+  ctx.fillText((topM*3.281).toFixed(1)+' ft',W/2,y0+rh+thick+26);
+  ctx.save();ctx.translate(x0-thick-22,H/2);ctx.rotate(-Math.PI/2);
+  ctx.fillText((rightM*3.281).toFixed(1)+' ft',0,0);ctx.restore();
+}
+
+function renderWallProfile(){
+  const cv=document.getElementById('wall-profile');
+  const W=cv.clientWidth||380,H=260;
+  cv.width=W*devicePixelRatio;cv.height=H*devicePixelRatio;
+  cv.style.height=H+'px';
+  const ctx=cv.getContext('2d');ctx.scale(devicePixelRatio,devicePixelRatio);
+  ctx.clearRect(0,0,W,H);
+  const{segs}=S.wallData,n=segs.length;
+  const blockHm=BLOCK_SPEC.heightIn*0.0254;
+  // Split courses into cut (above pad) and fill (below pad)
+  const maxCutCourses=Math.max(0,...segs.filter(s=>s.isCut===true).map(s=>Math.ceil(s.heightM/blockHm)));
+  const maxFillCourses=Math.max(0,...segs.filter(s=>s.isCut===false).map(s=>Math.ceil(s.heightM/blockHm)));
+  const totalCourses=Math.max(1,maxCutCourses+maxFillCourses);
+  const padL=40,padR=10,padT=22,padB=36;
+  const plotW=W-padL-padR,plotH=H-padT-padB;
+  const courseH=plotH/(totalCourses+0.5);
+  const baselineY=padT+maxCutCourses*courseH+courseH*0.25;  // pad-top reference line
+  const segW=plotW/n;
+
+  ctx.fillStyle='#333';ctx.font='10px system-ui';ctx.textAlign='left';
+  ctx.fillText('Courses relative to pad top (cut ↑ / fill ↓)',padL,12);
+
+  // Grid lines + labels (both directions from baseline)
+  ctx.strokeStyle='#e5e7eb';ctx.lineWidth=0.5;
+  ctx.fillStyle='#64748b';ctx.font='9px system-ui';ctx.textAlign='right';
+  const labelEvery=Math.max(1,Math.ceil(totalCourses/6));
+  for(let k=1;k<=maxCutCourses;k++){
+    const y=baselineY-k*courseH;
+    ctx.beginPath();ctx.moveTo(padL,y);ctx.lineTo(padL+plotW,y);ctx.stroke();
+    if(k%labelEvery===0)ctx.fillText('+'+(k*BLOCK_SPEC.heightIn)+'"',padL-3,y+3);
+  }
+  for(let k=1;k<=maxFillCourses;k++){
+    const y=baselineY+k*courseH;
+    ctx.beginPath();ctx.moveTo(padL,y);ctx.lineTo(padL+plotW,y);ctx.stroke();
+    if(k%labelEvery===0)ctx.fillText('−'+(k*BLOCK_SPEC.heightIn)+'"',padL-3,y+3);
+  }
+
+  // Side dividers + labels
+  const sideCounts=[0,0,0,0];
+  for(const s of segs)sideCounts[s.edge]++;
+  const edgeLabels=['Top','Right','Bottom','Left'];
+  let x=padL;
+  for(let ei=0;ei<4;ei++){
+    const sw=sideCounts[ei]*segW;
+    if(ei<3){ctx.strokeStyle='#cbd5e1';ctx.setLineDash([3,2]);ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(x+sw,padT);ctx.lineTo(x+sw,padT+plotH);ctx.stroke();ctx.setLineDash([]);}
+    ctx.fillStyle='#64748b';ctx.font='10px system-ui';ctx.textAlign='center';
+    ctx.fillText(edgeLabels[ei],x+sw/2,padT+plotH+14);
+    x+=sw;
+  }
+
+  // Pad-top baseline (strong dashed line)
+  ctx.strokeStyle='#1d4ed8';ctx.lineWidth=1.5;ctx.setLineDash([6,3]);
+  ctx.beginPath();ctx.moveTo(padL,baselineY);ctx.lineTo(padL+plotW,baselineY);ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle='#1d4ed8';ctx.font='9px system-ui';ctx.textAlign='left';
+  ctx.fillText('pad top',padL+2,baselineY-3);
+
+  // Courses: cut walls extend up, fill walls extend down
+  for(let i=0;i<n;i++){
+    const s=segs[i];if(s.heightM===0)continue;
+    const courses=Math.ceil(s.heightM/blockHm);
+    const color=wallColor(s.heightM);
+    const bx=padL+i*segW;
+    for(let k=0;k<courses;k++){
+      const by=s.isCut?baselineY-(k+1)*courseH:baselineY+k*courseH;
+      ctx.fillStyle=color;ctx.fillRect(bx,by,Math.max(1,segW+0.5),courseH-0.5);
+      if(segW>=3){ctx.strokeStyle='rgba(0,0,0,0.2)';ctx.lineWidth=0.5;
+        ctx.strokeRect(bx,by,Math.max(1,segW),courseH-0.5);}
+    }
+  }
+  ctx.fillStyle='#64748b';ctx.font='9px system-ui';ctx.textAlign='center';
+  ctx.fillText('perimeter →',padL+plotW/2,H-4);
+}
+
+// ── Compare 3D scene ──────────────────────────────────────────────────────────
+function buildCompareScene3D(){
+  if(!S.grid||!S.subgrid||!S.cells.length)return;
+  const canvas=document.getElementById('compare-cv');
+  const w=canvas.parentElement.clientWidth||800,h=420;
+  if(!S.cmp){
+    S.cmp={blend:parseInt(document.getElementById('cmp-slider').value)/100};
+    S.cmp.renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+    S.cmp.renderer.setPixelRatio(window.devicePixelRatio);
+    S.cmp.scene=new THREE.Scene();S.cmp.scene.background=new THREE.Color(0x0f172a);
+    S.cmp.camera=new THREE.PerspectiveCamera(50,w/h,0.01,1000);
+    S.cmp.orbit=new OrbitControls(S.cmp.camera,canvas);
+    S.cmp.orbit.enableDamping=true;S.cmp.orbit.dampingFactor=0.08;
+    S.cmp.scene.add(new THREE.AmbientLight(0xffffff,0.55));
+    const sun=new THREE.DirectionalLight(0xffffff,0.9);sun.position.set(10,20,10);S.cmp.scene.add(sun);
+    const rim=new THREE.DirectionalLight(0x9ec5ff,0.3);rim.position.set(-10,5,-10);S.cmp.scene.add(rim);
+    (function animate(){requestAnimationFrame(animate);S.cmp.orbit.update();S.cmp.renderer.render(S.cmp.scene,S.cmp.camera);})();
+  }
+  S.cmp.renderer.setSize(w,h);
+  S.cmp.camera.aspect=w/h;S.cmp.camera.updateProjectionMatrix();
+
+  if(S.cmp.group){S.cmp.scene.remove(S.cmp.group);S.cmp.group=null;}
+  const grp=new THREE.Group();
+  grp.scale.x=S.xf.fx?-1:1;grp.scale.z=S.xf.fz?-1:1;
+  grp.rotation.y=-S.xf.rot*Math.PI/180;
+  S.cmp.group=grp;S.cmp.scene.add(grp);
+
+  const sg=S.subgrid,fullG=S.grid,cell=fullG.cell,ex=S.exag;
+  const margin=Math.max(12,Math.round(Math.max(sg.rows,sg.cols)*0.5));
+  const r0=Math.max(0,sg.r0-margin),r1=Math.min(fullG.rows-1,sg.r0+sg.rows-1+margin);
+  const c0=Math.max(0,sg.c0-margin),c1=Math.min(fullG.cols-1,sg.c0+sg.cols-1+margin);
+  const cR=r1-r0+1,cC=c1-c0+1;
+
+  const ctxVals=[];
+  for(let r=r0;r<=r1;r++)for(let c=c0;c<=c1;c++){
+    const v=fullG.data[r*fullG.cols+c];if(v!==-1)ctxVals.push(v);
+  }
+  if(!ctxVals.length)return;
+  const vmin=Math.min(...ctxVals),vmax=Math.max(...ctxVals),range=vmax-vmin||1e-9;
+  const vals=S.cells.map(c=>c.v),lo=Math.min(...vals),hi=Math.max(...vals);
+  const tgt=lo+(hi-lo)*S.fillFrac;
+  const offX=-cC*cell/2,offZ=-cR*cell/2;
+
+  const rectSet=new Set();
+  for(const cc of S.cells)rectSet.add(cc.r*fullG.cols+cc.c);
+  const inRect=(r,c)=>rectSet.has(r*fullG.cols+c);
+
+  function buildMesh(elevFn,mat,colorFn){
+    const pos=[],col=[],idx=[],vidx={};let vi=0;
+    for(let r=r0;r<=r1;r++)for(let c=c0;c<=c1;c++){
+      const v=fullG.data[r*fullG.cols+c];if(v===-1)continue;
+      const e=elevFn(r,c,v);
+      vidx[(r-r0)*cC+(c-c0)]=vi++;
+      const rgb=colorFn?colorFn(r,c,e):tc(Math.max(0,Math.min(1,(e-vmin)/range)));
+      col.push(rgb[0]/255,rgb[1]/255,rgb[2]/255);
+      pos.push((c-c0)*cell+offX,e*ex,(r-r0)*cell+offZ);
+    }
+    for(let r=0;r<cR-1;r++)for(let c=0;c<cC-1;c++){
+      const a=vidx[r*cC+c],b=vidx[r*cC+c+1],d=vidx[(r+1)*cC+c],e=vidx[(r+1)*cC+c+1];
+      if(a!=null&&b!=null&&d!=null)idx.push(a,b,d);
+      if(b!=null&&e!=null&&d!=null)idx.push(b,e,d);
+    }
+    if(!pos.length)return null;
+    const geo=new THREE.BufferGeometry();
+    geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+    geo.setAttribute('color',new THREE.Float32BufferAttribute(col,3));
+    geo.setIndex(idx);geo.computeVertexNormals();
+    return new THREE.Mesh(geo,mat);
+  }
+
+  const beforeMat=new THREE.MeshLambertMaterial({vertexColors:true,side:THREE.DoubleSide,transparent:true,opacity:1});
+  const afterMat=new THREE.MeshLambertMaterial({vertexColors:true,side:THREE.DoubleSide,transparent:true,opacity:1});
+  S.cmp.beforeMesh=buildMesh((r,c,v)=>v,beforeMat);
+  if(S.cmp.beforeMesh)grp.add(S.cmp.beforeMesh);
+  const PAD_RGB=[45,55,72];  // charcoal — represents paved surface
+  S.cmp.afterMesh=buildMesh(
+    (r,c,v)=>inRect(r,c)?tgt:v,
+    afterMat,
+    (r,c,e)=>inRect(r,c)?PAD_RGB:tc(Math.max(0,Math.min(1,(e-vmin)/range)))
+  );
+  if(S.cmp.afterMesh)grp.add(S.cmp.afterMesh);
+
+  S.cmp.wallGroup=new THREE.Group();
+  grp.add(S.cmp.wallGroup);
+  if(S.wallData){
+    const thickM=BLOCK_SPEC.depthIn*0.0254;
+    for(const s of S.wallData.segs){
+      if(s.heightM===0)continue;
+      const wallH=s.heightM*ex;
+      const centerY=(s.outsideV+tgt)/2*ex;
+      // Shift wall outward by thick/2 so its inner face sits on the pad boundary
+      const wx=(s.mid.c-c0)*cell+offX+s.outwardN.c*thickM/2;
+      const wz=(s.mid.r-r0)*cell+offZ+s.outwardN.r*thickM/2;
+      const box=new THREE.BoxGeometry(s.lenM,wallH,thickM);
+      const mesh=new THREE.Mesh(box,new THREE.MeshLambertMaterial({color:0x94a3b8,transparent:true,opacity:1}));
+      mesh.position.set(wx,centerY,wz);
+      mesh.rotation.y=Math.atan2(-s.edgeDir.r,s.edgeDir.c);
+      S.cmp.wallGroup.add(mesh);
+    }
+  }
+  applyCompareBlend();
+
+  const cy=(vmin+vmax)/2*ex,dist=Math.max(cC,cR)*cell*1.3;
+  S.cmp.camera.position.set(0,cy+dist*0.7,dist*1.0);
+  S.cmp.orbit.target.set(0,cy,0);S.cmp.orbit.update();
+}
+
+function applyCompareBlend(){
+  if(!S.cmp)return;
+  const t=S.cmp.blend??1;
+  if(S.cmp.beforeMesh){
+    S.cmp.beforeMesh.material.opacity=1-t;
+    S.cmp.beforeMesh.visible=(1-t)>0.005;
+  }
+  if(S.cmp.afterMesh){
+    S.cmp.afterMesh.material.opacity=t;
+    S.cmp.afterMesh.visible=t>0.005;
+  }
+  if(S.cmp.wallGroup){
+    S.cmp.wallGroup.visible=t>0.005;
+    S.cmp.wallGroup.children.forEach(m=>{m.material.opacity=t;});
+  }
+}
+document.getElementById('cmp-slider').addEventListener('input',function(){
+  if(!S.cmp)S.cmp={};
+  S.cmp.blend=parseInt(this.value)/100;
+  applyCompareBlend();
+});
+
+window.resetCompareCamera=function(){
+  if(!S.cmp||!S.subgrid)return;
+  const sg=S.subgrid,cell=S.grid.cell,ex=S.exag;
+  const margin=Math.max(12,Math.round(Math.max(sg.rows,sg.cols)*0.5));
+  const cR=sg.rows+2*margin,cC=sg.cols+2*margin;
+  const vals=S.cells.map(c=>c.v);
+  const cy=(Math.min(...vals)+Math.max(...vals))/2*ex;
+  const dist=Math.max(cC,cR)*cell*1.3;
+  S.cmp.camera.position.set(0,cy+dist*0.7,dist*1.0);
+  S.cmp.orbit.target.set(0,cy,0);S.cmp.orbit.update();
+};
+
+window.addEventListener('resize',()=>{
+  drawOverlays();scheduleTopoRender();drawAlignGrid();
+  if(S.renderer){const cv=document.getElementById('scene-cv');const w=cv.parentElement.clientWidth||800;S.renderer.setSize(w,420);S.camera.aspect=w/420;S.camera.updateProjectionMatrix();}
+  if(S.cmp&&S.cmp.renderer){const cv=document.getElementById('compare-cv');const w=cv.parentElement.clientWidth||800;S.cmp.renderer.setSize(w,420);S.cmp.camera.aspect=w/420;S.cmp.camera.updateProjectionMatrix();}
+  if(S.wallData){renderWallPlan();renderWallProfile();}
+});
+</script>
+</body>
+</html>

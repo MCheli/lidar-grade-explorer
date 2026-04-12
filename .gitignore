@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Runtime
+uploads/
+*.ply
+*.e57
+
+# Tooling / local state
+.claude/
+.playwright-mcp/
+
+# Personal project context — not for public portfolio
+CONTEXT.md
+HANDOFF.md
+
+# Ad-hoc test screenshots at repo root (portfolio screenshots live in docs/)
+/*.png
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
