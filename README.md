@@ -30,6 +30,15 @@ Opens at **http://localhost:5050**. First run builds a Python venv (~2 minutes) 
 
 Then drop a `.ply` or `.e57` file onto the page.
 
+By default the server listens on `127.0.0.1` only, with the Flask debugger off. Environment overrides:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `LGE_HOST` | `127.0.0.1` | Bind address (`0.0.0.0` to allow other devices on your LAN — the app has no auth) |
+| `LGE_PORT` | `5050` | Port |
+| `LGE_DEBUG` | off | `1` enables the Flask debugger — local development only, never with a non-localhost host |
+| `LGE_MAX_UPLOAD_MB` | `2048` | Maximum upload size |
+
 ## Stack
 
 - **Backend:** Flask serving a single JSON endpoint per scan — no database, no session state
