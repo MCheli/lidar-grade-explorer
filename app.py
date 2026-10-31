@@ -294,5 +294,8 @@ if __name__ == "__main__":
     host  = os.environ.get("LGE_HOST", "127.0.0.1")
     port  = int(os.environ.get("LGE_PORT", "5050"))
     debug = os.environ.get("LGE_DEBUG") == "1"
+    if debug and host not in ("127.0.0.1", "localhost", "::1"):
+        print("Refusing to enable the debugger on a non-localhost host; LGE_DEBUG ignored")
+        debug = False
     print(f"LiDAR Grade Explorer  →  http://{host}:{port}")
     app.run(debug=debug, port=port, host=host)
