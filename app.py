@@ -3,7 +3,7 @@
 LiDAR Grade Explorer — Flask backend
 Reads PLY/E57 point clouds without open3d; uses plyfile + numpy only.
 """
-import os, io, base64, tempfile
+import os, io, math, base64, tempfile, logging
 import numpy as np
 import pandas as pd
 from scipy.ndimage import gaussian_filter
@@ -13,6 +13,16 @@ from flask import Flask, request, jsonify, send_from_directory
 app = Flask(__name__, static_folder="static")
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+# Reject oversized uploads before they hit disk (default 2 GiB; override with
+# LGE_MAX_UPLOAD_MB). Large residential scans are a few hundred MB.
+app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("LGE_MAX_UPLOAD_MB", "2048")) * 1024 * 1024
+
+# Bounds on user-supplied processing parameters. Tiny voxel/grid sizes blow up
+# memory (grid cells scale with 1/res^2), so clamp them and cap the grid size.
+VOXEL_RANGE    = (0.005, 1.0)
+RES_RANGE      = (0.02, 2.0)
+MAX_GRID_CELLS = 25_000_000
 
 
 # ── point-cloud I/O ───────────────────────────────────────────────────────────
@@ -121,6 +131,8 @@ def process_scan(filepath, voxel_size=0.03, grid_res=0.10):
     xe  = np.arange(gpts[:, h0].min() - res, gpts[:, h0].max() + res * 2, res)
     ze  = np.arange(gpts[:, h1].min() - res, gpts[:, h1].max() + res * 2, res)
     nx, nz = len(xe) - 1, len(ze) - 1
+    if nx * nz > MAX_GRID_CELLS:
+        raise ValueError(f"Grid too large ({nx}x{nz} cells) — use a coarser grid resolution")
 
     xi = (np.digitize(gpts[:, h0], xe) - 1).clip(0, nx - 1)
     zi = (np.digitize(gpts[:, h1], ze) - 1).clip(0, nz - 1)
@@ -220,6 +232,22 @@ def build_response(elev_rel, rgb, xe, ze):
 
 # ── Flask routes ──────────────────────────────────────────────────────────────
 
+def _bounded_float(name, default, lo, hi):
+    try:
+        v = float(request.form.get(name, default))
+    except ValueError:
+        raise ValueError(f"'{name}' must be a number")
+    if not math.isfinite(v) or not lo <= v <= hi:
+        raise ValueError(f"'{name}' must be between {lo} and {hi}")
+    return v
+
+
+@app.errorhandler(413)
+def too_large(_exc):
+    limit_mb = app.config["MAX_CONTENT_LENGTH"] // (1024 * 1024)
+    return jsonify({"error": f"File too large (limit {limit_mb} MB)"}), 413
+
+
 @app.route("/")
 def index():
     return send_from_directory("static", "index.html")
@@ -234,17 +262,25 @@ def upload():
     if ext not in (".ply", ".e57"):
         return jsonify({"error": f"Unsupported format '{ext}'. Use .ply or .e57"}), 400
 
+    try:
+        voxel = _bounded_float("voxel", "0.03", *VOXEL_RANGE)
+        res   = _bounded_float("res",   "0.10", *RES_RANGE)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
     tmp = tempfile.NamedTemporaryFile(suffix=ext, delete=False, dir=UPLOAD_DIR)
     f.save(tmp.name)
     tmp.close()
 
     try:
-        voxel = float(request.form.get("voxel", "0.03"))
-        res   = float(request.form.get("res",   "0.10"))
         elev_rel, rgb, xe, ze = process_scan(tmp.name, voxel, res)
         return jsonify(build_response(elev_rel, rgb, xe, ze))
-    except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception:
+        # Don't echo internal exception text (paths, library internals) to the client
+        logging.exception("Failed to process upload %r", f.filename)
+        return jsonify({"error": "Failed to process scan — is it a valid .ply/.e57 file?"}), 500
     finally:
         try:
             os.unlink(tmp.name)
@@ -253,5 +289,10 @@ def upload():
 
 
 if __name__ == "__main__":
-    print("LiDAR Grade Explorer  →  http://localhost:5050")
-    app.run(debug=True, port=5050, host="0.0.0.0")
+    # Localhost-only with the debugger off by default: the Werkzeug debugger
+    # allows arbitrary code execution, so never expose it on the network.
+    host  = os.environ.get("LGE_HOST", "127.0.0.1")
+    port  = int(os.environ.get("LGE_PORT", "5050"))
+    debug = os.environ.get("LGE_DEBUG") == "1"
+    print(f"LiDAR Grade Explorer  →  http://{host}:{port}")
+    app.run(debug=debug, port=port, host=host)
