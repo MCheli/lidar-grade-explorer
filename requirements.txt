@@ -1,8 +1,9 @@
-flask>=3.1.3
-werkzeug>=3.1.9
-plyfile>=0.8
-numpy>=1.24
-pandas>=2.0
-scipy>=1.11
-Pillow>=13.0.0
-pye57>=0.4.19
+# Floors clear known CVEs; caps keep a fresh install off untested major releases.
+flask>=3.1.3,<4
+werkzeug>=3.1.9,<4
+plyfile>=0.8,<2
+numpy>=1.24,<3
+pandas>=2.0,<4
+scipy>=1.11,<2
+Pillow>=13.0.0,<14
+pye57>=0.4.19,<0.5
